@@ -114,50 +114,50 @@ uint32_t cpu_percent = (cpu_busy_ms * 100) / cpu_total_ms;
 }
 ```
 
-## Registry & Container Runtime Simulation
+## ECI Registry & Container Runtime Simulation
 
 ### The Illusion K8s Needs to See
 
 When K8s schedules a pod, the node must fake:
 
-1. **Image Pull:** "Downloading image from registry"
-2. **Image Verification:** "Checking signature"
-3. **Container Creation:** "Creating container from image"
+1. **ECI Pull:** "Downloading embedded container image from registry"
+2. **ECI Verification:** "Checking signature"
+3. **Container Creation:** "Creating container from ECI"
 4. **Container Start:** "Starting container processes"
 5. **Container Runtime:** "Container is running"
 
 ### How We Fake It
 
-#### Image "Registry"
+#### ECI "Registry"
 
-Store "images" in flash as firmware variants:
+Store embedded container images (ECIs) in flash as firmware variants:
 
 ```
 Flash Layout:
 [0x00000000 - 0x00400000]  Bootloader/Current firmware (4MB)
-[0x00400000 - 0x00800000]  "Image registry" (4MB)
-    ├── gpio-controller:v1  (compiled firmware variant)
-    ├── temp-sensor:v1      (compiled firmware variant)
-    ├── led-display:v1      (compiled firmware variant)
-    └── custom-app:v1       (compiled firmware variant)
+[0x00400000 - 0x00800000]  "ECI registry" (4MB)
+    ├── gpio-controller:v1  (embedded container image)
+    ├── temp-sensor:v1      (embedded container image)
+    ├── led-display:v1      (embedded container image)
+    └── custom-app:v1       (embedded container image)
 ```
 
-#### "Image Pull" Simulation
+#### "ECI Pull" Simulation
 
 ```c
-// When K8s schedules pod with image "pico/gpio:v1"
-int fake_image_pull(const char *image_name) {
-    printf("Pulling image: %s\n", image_name);
+// When K8s schedules pod with ECI "pico/gpio:v1"
+int fake_eci_pull(const char *eci_name) {
+    printf("Pulling ECI: %s\n", eci_name);
     sleep_ms(1000);  // Fake network delay
 
-    // Look up image in flash registry
-    firmware_t *fw = flash_lookup_image(image_name);
+    // Look up ECI in flash registry
+    firmware_t *fw = flash_lookup_eci(eci_name);
     if (!fw) {
         return -1;  // ImagePullBackOff
     }
 
-    printf("Image pulled: %s (size: %d bytes)\n",
-           image_name, fw->size);
+    printf("ECI pulled: %s (size: %d bytes)\n",
+           eci_name, fw->size);
     return 0;
 }
 ```
@@ -168,18 +168,18 @@ int fake_image_pull(const char *image_name) {
 // A "container" is just a function pointer + state
 typedef struct {
     const char *name;
-    const char *image;
+    const char *eci;            // ECI name
     int (*main_func)(void);     // The actual code
     void *state;                // Container-specific state
     bool running;
 } container_t;
 
-int create_container(const char *image) {
-    firmware_t *fw = flash_lookup_image(image);
+int create_container(const char *eci_name) {
+    firmware_t *fw = flash_lookup_eci(eci_name);
 
     container_t *c = malloc(sizeof(container_t));
-    c->name = extract_name_from_image(image);
-    c->image = image;
+    c->name = extract_name_from_eci(eci_name);
+    c->eci = eci_name;
     c->main_func = (int (*)(void))fw->entry_point;
     c->state = malloc(fw->state_size);
     c->running = false;
@@ -479,7 +479,7 @@ data:
 ```
 
 **Flash Usage:**
-- Firmware: 2MB
+- Current ECI: 2MB
 - Logs: 10MB (rolling)
 - GPIO state history: 100MB (for debugging)
 
@@ -496,7 +496,7 @@ data:
 - 3 Services (one per sensor, exposes metrics)
 
 **Flash Usage:**
-- Firmware: 2MB
+- ECIs (3 total): 6MB
 - Time-series data: 1GB (days/weeks of samples)
 
 **K8s Integration:**
@@ -538,7 +538,7 @@ spec:
 
 ### Use Case 4: Deployment with Replica Management
 
-**Purpose:** Show how firmware updates work
+**Purpose:** Show how ECI updates work
 
 **Resources Implemented:**
 - 1 Node
@@ -561,16 +561,16 @@ spec:
 ```
 
 **Flash Usage:**
-- Current firmware (v1): 2MB
-- New firmware (v2): 2MB (staged)
-- Rollback firmware: 2MB (previous version)
+- Current ECI (v1): 2MB
+- New ECI (v2): 2MB (staged)
+- Rollback ECI: 2MB (previous version)
 
 **Behavior:**
 - K8s updates deployment to v2
-- Pico stages new firmware in flash
-- Reboots to new firmware
+- Pico stages new ECI in flash
+- Reboots to new ECI
 - Reports new version to K8s
-- Old firmware kept for rollback
+- Old ECI kept for rollback
 
 ## Flash Memory Management
 
@@ -581,7 +581,7 @@ Address Range          Size    Purpose
 ─────────────────────────────────────────────────────────
 0x00000000-0x00400000   4MB    Active firmware
 0x00400000-0x00800000   4MB    Backup firmware (rollback)
-0x00800000-0x01000000   8MB    Image registry (firmware variants)
+0x00800000-0x01000000   8MB    ECI registry (embedded container images)
 0x01000000-0x02000000  16MB    Manifests & configs
 0x02000000-0x10000000 224MB    Application data
 0x10000000-0x80000000   1.7GB  User data / logs
@@ -592,8 +592,8 @@ Address Range          Size    Purpose
 ```c
 // Flash management
 int flash_init_partitions(void);
-int flash_write_image(const char *name, const uint8_t *data, size_t size);
-firmware_t* flash_lookup_image(const char *name);
+int flash_write_eci(const char *name, const uint8_t *data, size_t size);
+firmware_t* flash_lookup_eci(const char *name);
 int flash_erase_partition(flash_partition_t partition);
 
 // Persistence
@@ -620,12 +620,12 @@ int flash_read_data(const char *key, uint8_t *buffer, size_t size);
 - `src/k3s_client.c` - TLS implementation
 - `src/node_status.c` - Enhanced status reporting
 
-### Phase 2: Flash Storage & Image Registry (New Issue #2)
+### Phase 2: Flash Storage & ECI Registry (New Issue #2)
 **Goal:** Enable multi-firmware support
 
 **Deliverables:**
 - Flash partition manager
-- Image registry (store firmware variants)
+- ECI registry (store embedded container images)
 - Manifest persistence
 - Data storage API
 
@@ -700,8 +700,8 @@ We track and report REAL values for SRAM and flash, fake plausible CPU values.
 ### Q2: How do we fake registry/container management?
 
 **Answer:**
-- **Registry:** Flash storage at 0x00800000 contains "images" (firmware variants)
-- **Image Pull:** Copy from flash to staging area, simulate delay
+- **ECI Registry:** Flash storage at 0x00800000 contains embedded container images (ECIs)
+- **ECI Pull:** Copy from flash to staging area, simulate delay
 - **Container Creation:** Function pointer + state structure
 - **Container Runtime:** Use second core for actual parallel execution!
 - **Resource Accounting:** Track per-container SRAM usage, enforce limits
@@ -710,7 +710,7 @@ We track and report REAL values for SRAM and flash, fake plausible CPU values.
 
 **Answer:**
 - Report as "ephemeral-storage" to K8s (accurate!)
-- Store firmware variants (enable multi-pod scenarios)
+- Store embedded container images / ECIs (enable multi-pod scenarios)
 - Store manifests/configs persistently
 - Store application data (sensor logs, state history, etc.)
 - Lazy load into SRAM as needed

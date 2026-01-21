@@ -14,7 +14,7 @@ Embedded nodes are microcontroller-based Kubernetes nodes that:
 - ✅ Support pod scheduling with resource constraints
 - ❌ Cannot pull arbitrary OCI images from registries
 - ❌ Cannot run standard containers (no Docker/containerd)
-- ❌ Use flash storage as "image registry" for firmware variants
+- ❌ Use flash storage as "ECI registry" for embedded container images (ECI)
 
 **Think of them as:** Specialized worker nodes for edge/IoT workloads with hardware-specific capabilities.
 
@@ -65,7 +65,7 @@ Pico boots → WiFi connect → Hardware discovery → K8s registration
 
 **What happens:**
 - Discovers available hardware (GPIO, sensors, LEDs)
-- Loads embedded images from flash registry
+- Loads embedded container images (ECI) from flash registry
 - Connects to K8s API server
 - Creates node object with taints and labels
 
@@ -88,7 +88,7 @@ metadata:
     hardware.pico.io/has-led: "true"
     hardware.pico.io/has-temp-sensor: "true"
   annotations:
-    pico.io/available-images: '["pico/gpio-controller:v1","pico/temp-sensor:v1"]'
+    pico.io/available-ecis: '["pico/gpio-controller:v1","pico/temp-sensor:v1"]'
 spec:
   taints:
   - key: pico.io/embedded-workload
@@ -146,7 +146,7 @@ taints:
 
 1. **Tolerate the taints**
 2. **Select embedded nodes** (via nodeSelector or affinity)
-3. **Request embedded image** (available in flash)
+3. **Request embedded container image (ECI)** (available in flash)
 4. **Request hardware resources** (if needed)
 
 **Example pod manifest:**
@@ -171,7 +171,7 @@ spec:
   nodeSelector:
     pico.io/workload-type: embedded
 
-  # 3. Use embedded image (from flash)
+  # 3. Use embedded container image / ECI (from flash)
   containers:
   - name: gpio
     image: pico/gpio-controller:v1
@@ -204,7 +204,7 @@ spec:
         operator: Exists  # Tolerate all embedded nodes
       containers:
       - name: exporter
-        image: pico/node-exporter:v1  # Must exist in flash!
+        image: pico/node-exporter:v1  # Must be available ECI in flash!
 ```
 
 **To exclude embedded nodes (default):**
@@ -237,16 +237,16 @@ kubectl describe node pico-node-1
 - Conditions (EmbeddedWorkload, OCICompatible)
 - Allocated Resources
 
-### Check Available Embedded Images
+### Check Available Embedded Container Images (ECIs)
 
 ```bash
 # JSON format
 kubectl get node pico-node-1 \
-  -o jsonpath='{.metadata.annotations.pico\.io/available-images}'
+  -o jsonpath='{.metadata.annotations.pico\.io/available-ecis}'
 
 # Pretty print
 kubectl get node pico-node-1 \
-  -o jsonpath='{.metadata.annotations.pico\.io/available-images}' | jq .
+  -o jsonpath='{.metadata.annotations.pico\.io/available-ecis}' | jq .
 ```
 
 **Example output:**
@@ -318,7 +318,7 @@ These are **expected behaviors** on embedded nodes:
 ✅ **Low pod count** - Embedded nodes typically run 1-3 specialized pods
 ✅ **Custom node conditions** - EmbeddedWorkload=True, OCICompatible=False
 ✅ **Different resource types** - Hardware resources instead of just CPU/memory
-✅ **ImagePullBackOff on wrong image** - Expected if pod requests unavailable image
+✅ **ImagePullBackOff on wrong ECI** - Expected if pod requests unavailable embedded container image
 
 ### What to Monitor
 
@@ -379,18 +379,18 @@ kubectl get pod my-pod
 ```bash
 kubectl describe pod my-pod
 # Events:
-#   Warning  Failed  Image 'pico/nonexistent:v1' not available in flash registry
+#   Warning  Failed  ECI 'pico/nonexistent:v1' not available in flash registry
 ```
 
 **Solution:**
 
-Check available images:
+Check available ECIs:
 ```bash
 kubectl get node pico-node-1 \
-  -o jsonpath='{.metadata.annotations.pico\.io/available-images}' | jq .
+  -o jsonpath='{.metadata.annotations.pico\.io/available-ecis}' | jq .
 ```
 
-Compile and flash the required firmware variant, or update pod to use available image.
+Compile and flash the required ECI (embedded container image), or update pod to use available ECI.
 
 #### Hardware Resource Exhausted
 
@@ -509,11 +509,11 @@ Monitor:
 
 ### 5. Documentation
 
-Document your embedded images:
+Document your embedded container images (ECIs):
 
 ```bash
-# Create ConfigMap with image documentation
-kubectl create configmap embedded-images-docs \
+# Create ConfigMap with ECI documentation
+kubectl create configmap embedded-eci-docs \
   --from-literal=gpio-controller='Controls GPIO pins via K8s' \
   --from-literal=temp-sensor='Reads temperature, exposes as metrics' \
   -n kube-system
@@ -728,7 +728,7 @@ For issues specific to embedded nodes:
 **Key Takeaways:**
 - ✅ Embedded nodes are specialized K8s nodes for edge/IoT workloads
 - ✅ Taints prevent accidental scheduling of standard workloads
-- ✅ Pods must tolerate taints and request embedded images
+- ✅ Pods must tolerate taints and request embedded container images (ECIs)
 - ✅ DaemonSets skip embedded nodes by default (by design!)
 - ✅ Hardware resources (GPIO, sensors) are Kubernetes-schedulable
 - ✅ Monitoring and management use standard K8s tools

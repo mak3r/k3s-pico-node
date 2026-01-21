@@ -526,7 +526,7 @@ When a pod spec requests hardware:
 spec:
   containers:
   - name: blink
-    image: pico/blinker:v1
+    image: pico/blinker:v1  # ECI (embedded container image)
     resources:
       limits:
         memory: "64Ki"
@@ -755,7 +755,7 @@ spec:
     hardware.pico.io/has-led: "true"
   containers:
   - name: blink
-    image: pico/blinker:v1
+    image: pico/blinker:v1  # ECI (embedded container image)
     resources:
       limits:
         memory: "64Ki"
@@ -919,7 +919,7 @@ spec:
     hardware.pico.io/has-led: "true"
   containers:
   - name: blink
-    image: pico/blinker:v1
+    image: pico/blinker:v1  # ECI (embedded container image)
     resources:
       limits:
         pico.io/onboard-led: 1

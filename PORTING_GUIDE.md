@@ -29,7 +29,7 @@ include/
 - ARM Cortex-M0+ or better
 - 200KB+ RAM (more is better)
 - WiFi or Ethernet
-- Flash storage (512KB+ for firmware, more for variants)
+- Flash storage (512KB+ for firmware, more for ECIs/embedded container images)
 
 ### ⚠️ Board-Specific (You Write This)
 
@@ -781,7 +781,7 @@ spec:
     kubernetes.io/hostname: YOUR-BOARD-node-1
   containers:
   - name: blink
-    image: pico/blinker:v1
+    image: pico/blinker:v1  # ECI (embedded container image)
     resources:
       limits:
         YOUR-BOARD.io/onboard-led: 1
