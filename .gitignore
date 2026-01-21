@@ -1,0 +1,29 @@
+# Build artifacts
+build/
+*.elf
+*.hex
+*.bin
+*.uf2
+*.o
+*.a
+*.d
+
+# Local configuration with credentials (NEVER COMMIT THIS!)
+include/config_local.h
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Debug files
+*.log

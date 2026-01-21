@@ -1,0 +1,35 @@
+cmake_minimum_required(VERSION 3.13)
+
+# Pull in SDK (must be before project)
+include(pico_sdk_import.cmake)
+
+# Set board type to Pico W/WH
+set(PICO_BOARD pico_w)
+
+# Project name
+project(pico_test_blink C CXX ASM)
+
+# Set C/C++ standards
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
+
+# Initialize the Pico SDK
+pico_sdk_init()
+
+# Create the test executable
+add_executable(pico_test_blink
+    src/test_blink.c
+)
+
+# Link against minimal pico libraries
+target_link_libraries(pico_test_blink
+    pico_stdlib
+    pico_cyw43_arch_none  # Just for LED control, no WiFi
+)
+
+# Enable USB output for debugging
+pico_enable_stdio_usb(pico_test_blink 1)
+pico_enable_stdio_uart(pico_test_blink 0)
+
+# Create map/bin/hex/uf2 files
+pico_add_extra_outputs(pico_test_blink)

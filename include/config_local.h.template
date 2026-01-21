@@ -1,0 +1,29 @@
+#ifndef CONFIG_LOCAL_H
+#define CONFIG_LOCAL_H
+
+/**
+ * Local Configuration Template
+ *
+ * INSTRUCTIONS:
+ * 1. Copy this file to config_local.h:
+ *    cp include/config_local.h.template include/config_local.h
+ *
+ * 2. Edit config_local.h with your actual credentials
+ *
+ * 3. config_local.h is gitignored and will NOT be committed
+ *
+ * SECURITY NOTE:
+ * - NEVER commit config_local.h to version control
+ * - Only commit this .template file with placeholder values
+ */
+
+// WiFi Credentials
+// Replace with your actual WiFi network credentials
+#define WIFI_SSID                "YOUR_WIFI_SSID"
+#define WIFI_PASSWORD            "YOUR_WIFI_PASSWORD"
+
+// K3s Server Configuration
+// Replace with your actual K3s server IP address
+#define K3S_SERVER_IP            "192.168.1.100"
+
+#endif // CONFIG_LOCAL_H
