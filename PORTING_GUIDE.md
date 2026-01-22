@@ -12,7 +12,7 @@ These components work on any ARM Cortex-M board with sufficient RAM:
 
 ```
 src/
-├── k3s_client.c          # TLS communication with K8s API
+├── k3s_client.c          # HTTP communication with k3s via nginx proxy
 ├── resource_manager.c    # K8s resource orchestration
 ├── pod_manager.c         # Pod lifecycle management
 ├── node_status.c         # Node status reporting
@@ -30,6 +30,9 @@ include/
 - 200KB+ RAM (more is better)
 - WiFi or Ethernet
 - Flash storage (512KB+ for firmware, more for ECIs/embedded container images)
+- nginx TLS proxy on k3s server (for TLS termination)
+
+**NOTE**: The Pico uses plain HTTP to communicate with an nginx proxy on the k3s server. TLS termination happens at the proxy, not on the microcontroller. See `docs/TLS-PROXY-RATIONALE.md` for the architectural rationale.
 
 ### ⚠️ Board-Specific (You Write This)
 
@@ -48,9 +51,11 @@ bsp/YOUR-BOARD/
 ### 🔄 May Need Tweaking
 
 - **Network stack integration** - If not using lwIP
-- **TLS library integration** - If not using mbedtls
+- **HTTP client** - If using a different HTTP library (but plain HTTP is simple)
 - **Flash driver** - If flash API differs significantly
 - **Build system** - CMake files may need adjustment
+
+**NOTE**: TLS is NOT used on the microcontroller. All devices use plain HTTP to an nginx proxy on the k3s server. This design choice eliminates TLS complexity and memory overhead from the embedded device.
 
 ## Prerequisites
 
@@ -714,6 +719,8 @@ int network_connect(const char *ssid, const char *password) {
 }
 ```
 
+**NOTE**: All boards use plain HTTP to communicate with the nginx proxy. No TLS implementation is needed on the microcontroller.
+
 ### Issue 4: Limited RAM
 
 **Problem:** Board has less than 200KB RAM
@@ -723,8 +730,9 @@ int network_connect(const char *ssid, const char *password) {
 ```c
 // bsp/YOUR-BOARD/config_YOUR_BOARD.h
 
-// Reduce TLS buffers
-#define MBEDTLS_SSL_MAX_CONTENT_LEN 4096  // Down from 8192
+// Reduce HTTP buffers
+#define HTTP_REQUEST_BUFFER_SIZE 2048   // Down from 4096
+#define HTTP_RESPONSE_BUFFER_SIZE 4096  // Down from 8192
 
 // Reduce pod limit
 #define MAX_PODS 3  // Down from 10
@@ -733,6 +741,8 @@ int network_connect(const char *ssid, const char *password) {
 #define ENABLE_METRICS_API 0  // Disable metrics
 #define ENABLE_CONFIGMAP_WATCHER 0  // Disable ConfigMap
 ```
+
+**NOTE**: Since we don't use TLS on the microcontroller, you save ~40KB of RAM compared to implementations that use mbedtls.
 
 ### Issue 5: Different Toolchain
 

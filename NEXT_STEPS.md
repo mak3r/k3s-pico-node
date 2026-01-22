@@ -27,22 +27,26 @@ The project has been successfully implemented and builds without errors!
 
 ### Critical TODOs Before Hardware Testing:
 
-1. **Update WiFi Credentials** (SECURE METHOD)
+1. **Set up nginx TLS Proxy on k3s Server**
+   - Install nginx on your k3s server
+   - Configure TLS termination proxy (see `docs/NGINX-PROXY-SETUP.md`)
+   - Configure firewall to restrict access to local network only
+   - **CRITICAL**: This proxy is essential for the Pico to communicate with k3s
+   - The Pico uses HTTP-only and relies on the proxy for TLS termination
+
+2. **Update WiFi Credentials** (SECURE METHOD)
    - Copy the template: `cp include/config_local.h.template include/config_local.h`
    - Edit `include/config_local.h` with your actual credentials
    - Set `WIFI_SSID`, `WIFI_PASSWORD`, and `K3S_SERVER_IP`
+   - Update `K3S_SERVER_PORT` to `6080` (nginx proxy port, not k3s API port)
    - **IMPORTANT**: `config_local.h` is gitignored and will NOT be committed to version control
 
-2. **Complete TLS Implementation**
-   - `src/k3s_client.c` has TLS scaffolding but needs:
-     - Integration of mbedtls with lwIP raw API
-     - HTTP request/response handling over TLS
-   - Reference: `pico-sdk/src/rp2_common/pico_lwip/altcp_tls_mbedtls.c`
-
-3. **Update Certificate IP Address**
-   - Certificates were generated with placeholder IP: `192.168.86.250`
-   - After Pico gets DHCP IP, regenerate certificates with actual IP
-   - Run: `certs/generate-certs.sh` (edit NODE_IP first)
+3. **Complete HTTP Client Implementation**
+   - `src/k3s_client.c` needs plain HTTP client implementation
+   - Connect to nginx proxy at `http://K3S_SERVER_IP:6080`
+   - Format HTTP requests with proper headers
+   - Parse HTTP responses
+   - **NOTE**: No TLS implementation needed on Pico - proxy handles it
 
 ## 🚀 Testing Steps
 
@@ -111,9 +115,18 @@ kubectl create configmap pico-config \
 # etc.
 ```
 
-## 🔧 Completing TLS Implementation
+## 🔧 Completing HTTP Client Implementation
 
-The most critical missing piece is the TLS client implementation in `k3s_client.c`. Here's what needs to be done:
+The most critical missing piece is the plain HTTP client implementation in `k3s_client.c`. The Pico uses HTTP-only communication to an nginx proxy on the k3s server, which terminates TLS.
+
+### Architecture: HTTP-only via TLS Proxy
+
+```
+Pico (HTTP) ──────► nginx proxy (HTTP→HTTPS) ──────► k3s API (HTTPS)
+            :6080                                :6443
+```
+
+See `docs/TLS-PROXY-RATIONALE.md` for why we use this architecture instead of TLS on the Pico.
 
 ### Required Changes in `src/k3s_client.c`:
 
@@ -122,56 +135,45 @@ The most critical missing piece is the TLS client implementation in `k3s_client.
 struct tcp_pcb *pcb = tcp_new();
 ip4_addr_t server_ip;
 ip4addr_aton(K3S_SERVER_IP, &server_ip);
-tcp_connect(pcb, &server_ip, K3S_SERVER_PORT, connect_callback);
+// Connect to nginx proxy on port 6080, not k3s API on 6443
+tcp_connect(pcb, &server_ip, 6080, connect_callback);
 ```
 
-2. **Set up mbedtls BIO callbacks**
+2. **Format plain HTTP request**
 ```c
-// Custom send/receive functions for lwIP integration
-static int tls_send(void *ctx, const unsigned char *buf, size_t len);
-static int tls_recv(void *ctx, unsigned char *buf, size_t len);
-
-mbedtls_ssl_set_bio(&ssl, pcb, tls_send, tls_recv, NULL);
-```
-
-3. **Perform TLS handshake**
-```c
-while ((ret = mbedtls_ssl_handshake(&ssl)) != 0) {
-    if (ret != MBEDTLS_ERR_SSL_WANT_READ &&
-        ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
-        // Error handling
-    }
-    // Poll network while waiting
-    cyw43_arch_poll();
-}
-```
-
-4. **Send/Receive HTTP over TLS**
-```c
-// Format HTTP request
 char request[1024];
 snprintf(request, sizeof(request),
     "POST %s HTTP/1.1\r\n"
-    "Host: %s:%d\r\n"
+    "Host: %s:6080\r\n"
     "Content-Type: application/json\r\n"
     "Content-Length: %d\r\n"
     "\r\n%s",
-    path, K3S_SERVER_IP, K3S_SERVER_PORT,
-    strlen(body), body);
+    path, K3S_SERVER_IP, strlen(body), body);
+```
 
-// Send via TLS
-mbedtls_ssl_write(&ssl, (unsigned char *)request, strlen(request));
+3. **Send HTTP request via TCP**
+```c
+// Send plain HTTP - no TLS needed
+err_t err = tcp_write(pcb, request, strlen(request), TCP_WRITE_FLAG_COPY);
+if (err == ERR_OK) {
+    tcp_output(pcb);
+}
+```
 
-// Receive response
+4. **Receive HTTP response**
+```c
+// Receive plain HTTP response
 char response[4096];
-mbedtls_ssl_read(&ssl, (unsigned char *)response, sizeof(response));
+// Parse HTTP response headers and body
+// Extract JSON from body
 ```
 
 ### Reference Implementation
 
 Study these pico-sdk examples:
-- `lib/lwip/contrib/apps/httpd/`
-- `src/rp2_common/pico_lwip/altcp_tls_mbedtls.c`
+- `lib/lwip/contrib/apps/httpd/` - HTTP server example
+- `pico-examples/pico_w/wifi/` - Basic HTTP client examples
+- **NOTE**: Skip any TLS/mbedtls examples - not needed for this project
 
 ## 📊 Memory Budget Analysis
 
@@ -228,13 +230,15 @@ make -j4
 
 ## 🎯 Future Enhancements
 
-1. **TLS Implementation** (critical)
+1. **HTTP Client Implementation** (critical - plain HTTP to nginx proxy)
 2. **Watch API** instead of polling for ConfigMaps
-3. **Certificate Auto-Renewal** using k8s CSR API
-4. **OTA Firmware Updates** via Kubernetes Jobs
-5. **Real Prometheus Metrics** (CPU temp, free memory, etc.)
-6. **Multiple ConfigMap Support**
-7. **WebAssembly Runtime** for downloadable applications
+3. **OTA Firmware Updates** via Kubernetes Jobs
+4. **Real Prometheus Metrics** (CPU temp, free memory, etc.)
+5. **Multiple ConfigMap Support**
+6. **WebAssembly Runtime** for downloadable applications
+7. **Per-Device Identity** (if moving beyond lab/experimental deployment)
+
+**NOTE**: TLS on the Pico is explicitly NOT planned. The HTTP-via-proxy architecture is the intended design. See `docs/TLS-PROXY-RATIONALE.md` for the rationale.
 
 ## 📚 Additional Resources
 

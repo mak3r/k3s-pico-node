@@ -307,27 +307,31 @@ See `RESOURCE_ACCOUNTING.md` for complete implementation details.
 ┌─────────────────────────────────────────────────────────────────┐
 │  Layer 2: K3s API Client (Generic Communication)                │
 │  ┌──────────────────────────────────────────────────────────┐  │
-│  │  HTTP/TLS Functions (Issue #1 Implementation)           │  │
+│  │  HTTP Functions (Issue #1 Implementation)               │  │
 │  │  - k3s_request(method, path, body, response)            │  │
 │  │  - k3s_get(path, response)                              │  │
 │  │  - k3s_post(path, body)                                 │  │
 │  │  - k3s_patch(path, body)                                │  │
 │  │  - k3s_delete(path)                                     │  │
 │  │  - k3s_watch(path, callback)  // Future: SSE/websocket │  │
+│  │                                                          │  │
+│  │  NOTE: All requests go via HTTP to nginx TLS proxy      │  │
 │  └──────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
                          ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│  Layer 1: TLS Transport (Issue #1 Focus)                        │
+│  Layer 1: HTTP Transport (HTTP-only via TLS Proxy)              │
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │  TCP Connection (lwIP)                                   │  │
 │  │  - Connection management                                 │  │
 │  │  - Buffer management                                     │  │
 │  └──────────────────────────────────────────────────────────┘  │
 │  ┌──────────────────────────────────────────────────────────┐  │
-│  │  TLS Layer (mbedtls)                                     │  │
-│  │  - Handshake                                             │  │
-│  │  - Encrypted communication                               │  │
+│  │  HTTP Client (Plain HTTP)                                │  │
+│  │  - HTTP request formatting                               │  │
+│  │  - HTTP response parsing                                 │  │
+│  │  - Connects to nginx proxy on k3s server                 │  │
+│  │  - Proxy terminates TLS before reaching Pico             │  │
 │  └──────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
                          ↓
@@ -607,18 +611,23 @@ int flash_read_data(const char *key, uint8_t *buffer, size_t size);
 
 ## Implementation Phases (Revised)
 
-### Phase 1: TLS Communication (Issue #1)
+### Phase 1: HTTP Communication via TLS Proxy (Issue #1)
 **Goal:** Get basic node operations working
 
 **Deliverables:**
-- Working TLS layer
+- Working HTTP client layer (plain HTTP to nginx proxy)
 - Node registration
 - Node status with proper capacity/allocatable reporting
 - ConfigMap watching
+- nginx TLS proxy setup on k3s server
 
 **Files:**
-- `src/k3s_client.c` - TLS implementation
+- `src/k3s_client.c` - HTTP client implementation
 - `src/node_status.c` - Enhanced status reporting
+- `docs/NGINX-PROXY-SETUP.md` - Proxy configuration guide
+
+**Architecture Decision:**
+Pico uses HTTP-only communication to an nginx proxy on the k3s server. The proxy terminates TLS and forwards to the k3s API. This design choice is documented in `docs/TLS-PROXY-RATIONALE.md` and is critical to keeping the Pico implementation simple and memory-efficient.
 
 ### Phase 2: Flash Storage & ECI Registry (New Issue #2)
 **Goal:** Enable multi-firmware support
@@ -729,21 +738,32 @@ Each firmware build chooses which resources to implement.
 
 ## Decision for Issue #1
 
-**For TLS implementation (Issue #1), we do NOT need:**
+**For HTTP communication implementation (Issue #1), we do NOT need:**
 - Resource manager framework (comes in Phase 3)
 - Pod abstractions (comes in Phase 4)
 - Flash partitioning (comes in Phase 2)
+- TLS implementation on the Pico (using HTTP-only via proxy)
 
 **For Issue #1, we DO need:**
-- Generic `k3s_request()` function (already designed this way ✅)
+- Generic `k3s_request()` function for plain HTTP (already designed this way ✅)
 - Enhanced node status reporting (add capacity/allocatable/conditions)
+- nginx TLS proxy setup on k3s server
 
 **Key Design Decision:**
-Keep Layer 2 (k3s_client.c) completely resource-agnostic. It doesn't know about pods vs services vs ingress. It just sends HTTP requests.
+Keep Layer 2 (k3s_client.c) completely resource-agnostic. It doesn't know about pods vs services vs ingress. It just sends HTTP requests to the nginx proxy.
+
+The Pico uses **HTTP-only communication**. TLS termination happens at the nginx proxy on the k3s server. This architectural decision is critical for:
+1. Memory efficiency (saves ~40KB RAM by eliminating mbedtls on Pico)
+2. Simplicity (plain HTTP debugging)
+3. Compatibility (avoids mbedtls/Go TLS issues)
+4. Performance (no TLS handshake overhead)
+
+See `docs/TLS-PROXY-RATIONALE.md` for the complete rationale.
 
 This design is ALREADY correct in the current code! We just need to:
-1. Implement the TLS transport
+1. Implement the HTTP transport (connecting to nginx proxy)
 2. Enhance `src/node_status.c` to report capacity/allocatable/conditions properly
+3. Set up nginx TLS proxy on k3s server
 
 ## Next Steps
 
