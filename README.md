@@ -12,30 +12,36 @@ This project enables a Raspberry Pi Pico WH microcontroller to appear as a node 
 
 ## Architecture
 
+This project uses a **TLS proxy architecture** where the Pico sends HTTP requests to an nginx proxy on the k3s server, which terminates TLS and forwards to the k3s API. This approach bypasses TLS on the resource-constrained Pico while maintaining secure communication with the k3s API.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture and [docs/TLS-PROXY-RATIONALE.md](docs/TLS-PROXY-RATIONALE.md) for security rationale.
+
 ```
-K3s Server                    Raspberry Pi Pico WH
-┌──────────────┐              ┌────────────────────┐
-│ API Server   │◄────TLS──────┤ K3s Client         │
-│   :6443      │   Status     │ (node registration)│
-│              │   Reports    │                    │
-│ ConfigMaps   │◄────Poll─────┤ ConfigMap Watcher  │
-│              │              │ (memory updates)   │
-└──────────────┘              │                    │
-                              │ Mock Kubelet       │
-                              │   :10250 (HTTP)    │
-                              │   /healthz         │
-                              │                    │
-                              │ Memory Region      │
-                              │   (1KB SRAM)       │
-                              └────────────────────┘
+┌─────────────────┐         ┌──────────────────────────────────┐
+│                 │  HTTP   │  k3s Server                      │
+│  Pico W         ├────────►│  ┌─────────────────┐             │
+│  (HTTP Client)  │ :6080   │  │ nginx proxy     │  HTTPS      │
+│                 │         │  │ (TLS term)      ├────────────► │
+│                 │         │  └─────────────────┘   :6443     │
+│                 │         │           │                       │
+│  ConfigMap      │         │           v                       │
+│  Watcher        │◄────────┤  ┌─────────────────┐             │
+│                 │  Poll   │  │ k3s API server  │             │
+│  Mock Kubelet   │         │  │ localhost:6443  │             │
+│    :10250       │         │  └─────────────────┘             │
+│                 │         │                                  │
+│  Memory Region  │         │                                  │
+│    (1KB SRAM)   │         │                                  │
+└─────────────────┘         └──────────────────────────────────┘
 ```
 
 ## Prerequisites
 
 - **Hardware**: Raspberry Pi Pico WH (with WiFi)
 - **K3s Cluster**: Running k3s cluster with API access
+- **nginx**: Installed on k3s server for TLS proxy
 - **Toolchain**: ARM cross-compiler, CMake, pico-sdk
-- **Network**: Pico and k3s server on same network
+- **Network**: Pico and k3s server on same network (WPA2/WPA3 protected)
 
 ## Hardware Testing
 
@@ -49,7 +55,89 @@ See [test-blink/README.md](test-blink/README.md) for instructions on:
 
 The test firmware takes only a few minutes to build and flash, and can save time by identifying hardware problems before attempting the full K3s node firmware.
 
-## Configuration
+## nginx TLS Proxy Setup
+
+The Pico sends HTTP requests to an nginx proxy on your k3s server, which terminates TLS and forwards to the k3s API. This must be configured before the Pico can communicate with k3s.
+
+### Install nginx
+
+```bash
+# On k3s server
+sudo apt update
+sudo apt install -y nginx
+```
+
+### Configure the Proxy
+
+Create the proxy configuration:
+
+```bash
+sudo tee /etc/nginx/sites-available/k3s-proxy > /dev/null <<'EOF'
+server {
+    listen 6080;
+    server_name _;
+
+    # Only allow local network access
+    allow 192.168.0.0/16;
+    allow 10.0.0.0/8;
+    deny all;
+
+    location / {
+        proxy_pass https://127.0.0.1:6443;
+        proxy_ssl_certificate /var/lib/rancher/k3s/server/tls/client-admin.crt;
+        proxy_ssl_certificate_key /var/lib/rancher/k3s/server/tls/client-admin.key;
+        proxy_ssl_trusted_certificate /var/lib/rancher/k3s/server/tls/server-ca.crt;
+        proxy_ssl_verify on;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Kubernetes needs these
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # No buffering for streaming
+        proxy_buffering off;
+    }
+}
+EOF
+
+# Enable the site
+sudo ln -s /etc/nginx/sites-available/k3s-proxy /etc/nginx/sites-enabled/
+sudo nginx -t  # Test configuration
+sudo systemctl restart nginx
+```
+
+### Configure Firewall
+
+**Important**: Only allow local network access to port 6080.
+
+```bash
+# For firewalld (openSUSE, RHEL, Fedora)
+sudo firewall-cmd --zone=internal --add-port=6080/tcp --permanent
+sudo firewall-cmd --reload
+
+# For ufw (Ubuntu, Debian)
+sudo ufw allow from 192.168.0.0/16 to any port 6080 proto tcp
+sudo ufw reload
+```
+
+### Test the Proxy
+
+```bash
+# From k3s server (should work)
+curl -v http://localhost:6080/version
+
+# From Pico network (should work if firewall configured correctly)
+curl -v http://192.168.x.x:6080/version
+```
+
+You should see k3s version information in JSON format.
+
+## Pico Configuration
 
 Before building, create your local configuration file with WiFi credentials:
 
@@ -181,21 +269,27 @@ The RP2040 has 264KB SRAM. Estimated allocation:
 
 ## Known Limitations
 
-1. **No Container Runtime**: Cannot run actual containers
-2. **HTTP Only (currently)**: Kubelet server doesn't use TLS yet
-3. **No TLS Client (currently)**: k3s_client needs TLS implementation
+1. **No Container Runtime**: Cannot run actual containers (by design)
+2. **HTTP Client**: Pico uses HTTP to nginx proxy (server-side TLS only)
+3. **Kubelet HTTP Only**: Mock kubelet server doesn't use TLS yet
 4. **Polling Only**: Uses polling instead of Watch API for ConfigMaps
-5. **Certificate Expiration**: Pre-generated certs expire in 365 days
+5. **Shared Identity**: All Picos use the same identity (nginx's admin cert)
+6. **No Secure Storage**: WiFi credentials and firmware stored in plaintext on flash
+
+See [docs/TLS-PROXY-RATIONALE.md](docs/TLS-PROXY-RATIONALE.md) for detailed security analysis.
 
 ## Next Steps
 
 To make this production-ready:
 
-1. **Implement TLS**: Add TLS to kubelet server and k3s client
-2. **Implement Watch API**: Use k8s Watch instead of polling
-3. **OTA Updates**: Enable firmware updates via k8s Jobs
-4. **Certificate Renewal**: Implement CSR-based cert renewal
-5. **Metrics**: Add real Prometheus metrics
+1. **Implement Watch API**: Use k8s Watch instead of polling ConfigMaps
+2. **OTA Updates**: Enable firmware updates via k8s Jobs
+3. **Per-Device Identity**: Implement secure provisioning with unique certificates per device
+4. **Hardware Security**: Migrate to microcontroller with secure enclave (e.g., ESP32-S3)
+5. **Metrics**: Add real Prometheus metrics with more detailed telemetry
+6. **Secure Boot**: Implement firmware signature verification
+
+For experimental/lab deployments, the current architecture is acceptable. See [docs/TLS-PROXY-RATIONALE.md](docs/TLS-PROXY-RATIONALE.md) for detailed discussion of security trade-offs.
 
 ## Troubleshooting
 
@@ -216,7 +310,7 @@ To make this production-ready:
 
 ## License
 
-This project is provided as-is for educational purposes.
+This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
 
 ## Credits
 
