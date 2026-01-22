@@ -2,15 +2,18 @@
 #define K3S_CLIENT_H
 
 /**
- * K3s API Client
+ * K3s API Client (HTTP-only via nginx proxy)
  *
- * Handles TLS connections to the k3s API server
+ * Handles HTTP connections to nginx proxy which terminates TLS
+ * and forwards to the k3s API server.
+ *
+ * Architecture: Pico (HTTP) -> nginx proxy (TLS) -> k3s API
+ *
  * Provides functions to interact with Kubernetes API
  */
 
 /**
  * Initialize the k3s client
- * Loads certificates and sets up TLS configuration
  * Returns 0 on success, -1 on error
  */
 int k3s_client_init(void);
