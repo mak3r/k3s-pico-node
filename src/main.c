@@ -3,6 +3,8 @@
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
 #include "lwip/tcp.h"
+#include "lwip/netif.h"
+#include "lwip/ip4_addr.h"
 
 #include "config.h"
 #include "kubelet_server.h"
@@ -72,6 +74,33 @@ int init_wifi(void) {
     node_status_get_ip(ip_buffer, sizeof(ip_buffer));
     printf("WiFi connected! IP address: %s\n", ip_buffer);
 
+    // Give DHCP extra time to fully complete and get gateway info
+    printf("Waiting for DHCP to complete...\n");
+    sleep_ms(2000);
+    cyw43_arch_poll();  // Poll once more
+    printf("DHCP wait complete\n");
+
+    // WORKAROUND: Manually set gateway if DHCP didn't set it correctly
+    // This is a known issue with some pico-sdk/cyw43 versions
+    struct netif *netif = netif_default;
+    if (netif != NULL) {
+        printf("Current gateway: %s\n", ipaddr_ntoa(&netif->gw));
+
+        // Check if gateway is invalid (all zeros or netmask value)
+        if (ip4_addr_isany_val(*netif_ip4_gw(netif)) ||
+            netif->gw.addr == netif->netmask.addr) {
+
+            printf("Gateway not set correctly by DHCP, setting manually...\n");
+
+            // Manually set gateway to .1 of our subnet (standard convention)
+            ip4_addr_t gw;
+            IP4_ADDR(&gw, 192, 168, 86, 1);
+            netif_set_gw(netif, &gw);
+
+            printf("Gateway manually set to: %s\n", ipaddr_ntoa(&netif->gw));
+        }
+    }
+
     return 0;
 }
 
@@ -91,10 +120,11 @@ int init_subsystems(void) {
 
     // Initialize kubelet server
     printf("  [3/5] Kubelet server...\n");
-    if (kubelet_server_init() != 0) {
-        printf("ERROR: Failed to initialize kubelet server\n");
-        return -1;
-    }
+    printf("  TEMPORARILY DISABLED FOR TESTING\n");
+    // if (kubelet_server_init() != 0) {
+    //     printf("ERROR: Failed to initialize kubelet server\n");
+    //     return -1;
+    // }
 
     // Initialize ConfigMap watcher
     printf("  [4/5] ConfigMap watcher...\n");
@@ -165,7 +195,7 @@ int main() {
         cyw43_arch_poll();
 
         // Process kubelet server requests (non-blocking)
-        kubelet_server_poll();
+        // kubelet_server_poll();  // TEMPORARILY DISABLED FOR TESTING
 
         // Get current time
         absolute_time_t now = get_absolute_time();
@@ -203,7 +233,7 @@ int main() {
     }
 
     // Cleanup (never reached in normal operation)
-    kubelet_server_shutdown();
+    // kubelet_server_shutdown();  // TEMPORARILY DISABLED FOR TESTING
     k3s_client_shutdown();
     cyw43_arch_deinit();
 

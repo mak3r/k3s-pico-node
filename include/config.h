@@ -7,7 +7,7 @@
 #include "config_local.h"
 
 // K3s Configuration
-#define K3S_SERVER_PORT          6443
+#define K3S_SERVER_PORT          6080  // nginx proxy port (not 6443)
 #define K3S_NODE_NAME            "pico-node-1"
 
 // Node configuration
