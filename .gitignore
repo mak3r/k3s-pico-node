@@ -11,6 +11,10 @@ build/
 # Local configuration with credentials (NEVER COMMIT THIS!)
 include/config_local.h
 
+# Private keys and certificates (NEVER COMMIT THESE!)
+*.key
+*.pem
+
 # IDE and editor files
 .vscode/
 .idea/
