@@ -1,6 +1,7 @@
 #include "k3s_client.h"
 #include "tcp_connection.h"
 #include "http_client.h"
+#include "time_sync.h"
 #include "config.h"
 #include "pico/cyw43_arch.h"
 #include <stdio.h>
@@ -213,6 +214,16 @@ static int k3s_request(const char *method, const char *path, const char *body,
 
     DEBUG_PRINT("HTTP %d %s", http_response.status_code,
                 http_status_string(http_response.status_code));
+
+    // Extract and sync time from Date header
+    char date_header[64];
+    if (http_get_header(response_buffer, "Date", date_header, sizeof(date_header)) == 0) {
+        if (time_sync_update_from_header(date_header) == 0) {
+            if (!time_sync_is_synced()) {
+                DEBUG_PRINT("Time synchronized from server");
+            }
+        }
+    }
 
     // Check for HTTP errors
     if (http_response.status_code >= 400) {

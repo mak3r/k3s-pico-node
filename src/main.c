@@ -12,6 +12,7 @@
 #include "node_status.h"
 #include "configmap_watcher.h"
 #include "memory_manager.h"
+#include "time_sync.h"
 
 // Timing tracking
 static absolute_time_t last_status_report;
@@ -108,33 +109,36 @@ int init_subsystems(void) {
     printf("\nInitializing subsystems...\n");
 
     // Initialize memory manager
-    printf("  [1/5] Memory manager...\n");
+    printf("  [1/6] Memory manager...\n");
     memory_manager_init();
 
+    // Initialize time synchronization
+    printf("  [2/6] Time sync...\n");
+    time_sync_init();
+
     // Initialize k3s client
-    printf("  [2/5] K3s API client...\n");
+    printf("  [3/6] K3s API client...\n");
     if (k3s_client_init() != 0) {
         printf("ERROR: Failed to initialize k3s client\n");
         return -1;
     }
 
     // Initialize kubelet server
-    printf("  [3/5] Kubelet server...\n");
-    printf("  TEMPORARILY DISABLED FOR TESTING\n");
-    // if (kubelet_server_init() != 0) {
-    //     printf("ERROR: Failed to initialize kubelet server\n");
-    //     return -1;
-    // }
+    printf("  [4/6] Kubelet server...\n");
+    if (kubelet_server_init() != 0) {
+        printf("ERROR: Failed to initialize kubelet server\n");
+        return -1;
+    }
 
     // Initialize ConfigMap watcher
-    printf("  [4/5] ConfigMap watcher...\n");
+    printf("  [5/6] ConfigMap watcher...\n");
     if (configmap_watcher_init() != 0) {
         printf("ERROR: Failed to initialize ConfigMap watcher\n");
         return -1;
     }
 
     // Register node with k3s cluster
-    printf("  [5/5] Registering node with k3s...\n");
+    printf("  [6/6] Registering node with k3s...\n");
     if (node_status_register() != 0) {
         printf("WARNING: Node registration failed, will retry in status reports\n");
         node_registered = false;
@@ -195,7 +199,7 @@ int main() {
         cyw43_arch_poll();
 
         // Process kubelet server requests (non-blocking)
-        // kubelet_server_poll();  // TEMPORARILY DISABLED FOR TESTING
+        kubelet_server_poll();
 
         // Get current time
         absolute_time_t now = get_absolute_time();
@@ -233,7 +237,7 @@ int main() {
     }
 
     // Cleanup (never reached in normal operation)
-    // kubelet_server_shutdown();  // TEMPORARILY DISABLED FOR TESTING
+    kubelet_server_shutdown();
     k3s_client_shutdown();
     cyw43_arch_deinit();
 

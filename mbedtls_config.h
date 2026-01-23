@@ -72,7 +72,7 @@
 #undef MBEDTLS_SSL_PROTO_TLS1_3    // No TLS 1.3
 #undef MBEDTLS_SSL_SRV_C           // No TLS server for outbound connections
 #undef MBEDTLS_SSL_PROTO_DTLS      // No DTLS
-#undef MBEDTLS_GCM_C               // No GCM mode (use CBC only)
+#define MBEDTLS_GCM_C               // Enable GCM mode (required for ECDHE-GCM ciphers)
 #undef MBEDTLS_CCM_C               // No CCM mode
 // Note: ECC and ECDHE now enabled above for K3s ECDSA certificate support
 // #undef MBEDTLS_ECP_C               // Re-enabled for ECDSA
@@ -84,14 +84,21 @@
 #undef MBEDTLS_KEY_EXCHANGE_ECDH_ECDSA_ENABLED
 #undef MBEDTLS_KEY_EXCHANGE_ECDH_RSA_ENABLED
 
-// Enable only RSA key exchange (simplest, no DH)
+// Enable RSA and ECDHE key exchange (ECDHE required for modern servers)
 #define MBEDTLS_KEY_EXCHANGE_RSA_ENABLED
+#define MBEDTLS_KEY_EXCHANGE_ECDHE_RSA_ENABLED
+#define MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
 
-// Cipher suites - only enable essential ones
+// Cipher suites - try CBC first to debug GCM issues
 #define MBEDTLS_SSL_CIPHERSUITES                        \
-        MBEDTLS_TLS_RSA_WITH_AES_128_CBC_SHA256,        \
-        MBEDTLS_TLS_RSA_WITH_AES_256_CBC_SHA256,        \
-        MBEDTLS_TLS_RSA_WITH_AES_128_CBC_SHA
+        MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256, \
+        MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, \
+        MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,  \
+        MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,  \
+        MBEDTLS_TLS_RSA_WITH_AES_128_CBC_SHA256
+
+// Enable Extended Master Secret (RFC 7627) - required by modern TLS servers like Go
+#define MBEDTLS_SSL_EXTENDED_MASTER_SECRET
 
 // Disable additional features
 #undef MBEDTLS_SSL_RENEGOTIATION
@@ -99,11 +106,13 @@
 #undef MBEDTLS_SSL_SESSION_TICKETS
 #undef MBEDTLS_SSL_EXPORT_KEYS
 #undef MBEDTLS_SSL_TRUNCATED_HMAC
-#undef MBEDTLS_SSL_EXTENDED_MASTER_SECRET
+#undef MBEDTLS_SSL_SERVER_NAME_INDICATION  // Disable SNI (causes issues with Go TLS servers)
+
+// Enable debug output for troubleshooting
+#define MBEDTLS_DEBUG_C
 
 // Disable testing and development features
 #undef MBEDTLS_SSL_RECORD_CHECKING
-#undef MBEDTLS_DEBUG_C
 #undef MBEDTLS_SELF_TEST
 #undef MBEDTLS_VERSION_FEATURES
 

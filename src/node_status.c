@@ -1,5 +1,6 @@
 #include "node_status.h"
 #include "k3s_client.h"
+#include "time_sync.h"
 #include "config.h"
 #include "pico/cyw43_arch.h"
 #include <stdio.h>
@@ -119,23 +120,86 @@ int node_status_register(void) {
     return result;
 }
 
+// Status-only JSON template for PATCH requests (without kind/apiVersion/metadata)
+// Timestamps: %s = lastHeartbeatTime, %s = lastTransitionTime
+static const char *status_only_json_template =
+    "{"
+    "  \"status\": {"
+    "    \"conditions\": ["
+    "      {\"type\": \"Ready\", \"status\": \"True\", \"lastHeartbeatTime\": \"%s\", \"lastTransitionTime\": \"%s\", \"reason\": \"KubeletReady\", \"message\": \"Pico node is ready\"},"
+    "      {\"type\": \"MemoryPressure\", \"status\": \"False\", \"lastHeartbeatTime\": \"%s\", \"lastTransitionTime\": \"%s\", \"reason\": \"KubeletHasSufficientMemory\"},"
+    "      {\"type\": \"DiskPressure\", \"status\": \"False\", \"lastHeartbeatTime\": \"%s\", \"lastTransitionTime\": \"%s\", \"reason\": \"KubeletHasNoDiskPressure\"},"
+    "      {\"type\": \"PIDPressure\", \"status\": \"False\", \"lastHeartbeatTime\": \"%s\", \"lastTransitionTime\": \"%s\", \"reason\": \"KubeletHasSufficientPID\"},"
+    "      {\"type\": \"NetworkUnavailable\", \"status\": \"False\", \"lastHeartbeatTime\": \"%s\", \"lastTransitionTime\": \"%s\", \"reason\": \"RouteCreated\"}"
+    "    ],"
+    "    \"addresses\": ["
+    "      {\"type\": \"InternalIP\", \"address\": \"%s\"},"
+    "      {\"type\": \"Hostname\", \"address\": \"%s\"}"
+    "    ],"
+    "    \"capacity\": {"
+    "      \"cpu\": \"1\","
+    "      \"memory\": \"256Ki\","
+    "      \"pods\": \"0\""
+    "    },"
+    "    \"allocatable\": {"
+    "      \"cpu\": \"1\","
+    "      \"memory\": \"256Ki\","
+    "      \"pods\": \"0\""
+    "    },"
+    "    \"nodeInfo\": {"
+    "      \"machineID\": \"rp2040-pico-wh\","
+    "      \"systemUUID\": \"rp2040-pico-wh\","
+    "      \"bootID\": \"rp2040-pico-wh\","
+    "      \"kernelVersion\": \"5.15.0-rp2040\","
+    "      \"osImage\": \"Pico SDK\","
+    "      \"containerRuntimeVersion\": \"mock://1.0.0\","
+    "      \"kubeletVersion\": \"v1.34.0\","
+    "      \"kubeProxyVersion\": \"v1.34.0\","
+    "      \"operatingSystem\": \"linux\","
+    "      \"architecture\": \"arm\""
+    "    },"
+    "    \"daemonEndpoints\": {"
+    "      \"kubeletEndpoint\": {"
+    "        \"Port\": %d"
+    "      }"
+    "    }"
+    "  }"
+    "}";
+
 int node_status_report(void) {
     char json_buffer[2048];
     char node_ip[16];
     char url[128];
+    char timestamp[32];
 
     node_status_get_ip(node_ip, sizeof(node_ip));
 
     DEBUG_PRINT("Reporting node status for %s", K3S_NODE_NAME);
 
-    // Format node status JSON
+    // Get current timestamp for heartbeat
+    if (time_sync_get_iso8601(timestamp, sizeof(timestamp)) != 0) {
+        // Not synced yet - use placeholder
+        strcpy(timestamp, "1970-01-01T00:00:00Z");
+        DEBUG_PRINT("Warning: Time not synced, using placeholder timestamp");
+    }
+
+    // Format status-only JSON (for PATCH /status endpoint)
+    // Using same timestamp for both lastHeartbeatTime and lastTransitionTime
     int len = snprintf(json_buffer, sizeof(json_buffer),
-                      node_status_json_template,
-                      K3S_NODE_NAME,
-                      K3S_NODE_NAME,
-                      node_ip,
-                      K3S_NODE_NAME,
-                      KUBELET_PORT);
+                      status_only_json_template,
+                      timestamp,          // Ready.lastHeartbeatTime
+                      timestamp,          // Ready.lastTransitionTime
+                      timestamp,          // MemoryPressure.lastHeartbeatTime
+                      timestamp,          // MemoryPressure.lastTransitionTime
+                      timestamp,          // DiskPressure.lastHeartbeatTime
+                      timestamp,          // DiskPressure.lastTransitionTime
+                      timestamp,          // PIDPressure.lastHeartbeatTime
+                      timestamp,          // PIDPressure.lastTransitionTime
+                      timestamp,          // NetworkUnavailable.lastHeartbeatTime
+                      timestamp,          // NetworkUnavailable.lastTransitionTime
+                      node_ip,            // status.addresses[0].address
+                      K3S_NODE_NAME,      // status.addresses[1].address
+                      KUBELET_PORT);      // status.daemonEndpoints.kubeletEndpoint.Port
 
     if (len < 0 || len >= sizeof(json_buffer)) {
         printf("ERROR: Node status JSON too large or formatting error\n");

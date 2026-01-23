@@ -20,7 +20,7 @@
 #define MEMP_NUM_PBUF              16    // Packet buffers
 #define MEMP_NUM_RAW_PCB           0     // No raw sockets needed
 #define MEMP_NUM_UDP_PCB           2     // Minimal UDP (for DNS)
-#define MEMP_NUM_TCP_PCB           3     // Max 3 concurrent TCP connections
+#define MEMP_NUM_TCP_PCB           5     // Max 5 concurrent TCP connections (was 3, increased for testing)
 #define MEMP_NUM_TCP_PCB_LISTEN    2     // 2 listening sockets (kubelet + spare)
 #define MEMP_NUM_TCP_SEG           16    // TCP segments
 #define MEMP_NUM_NETBUF            0     // Not using netconn API

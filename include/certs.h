@@ -17,55 +17,28 @@ const char client_ca_cert[] =
 "-----END CERTIFICATE-----\n"
 ;
 
-// Client Kubelet Certificate
-const char client_kubelet_cert[] = 
+// Client Kubelet Certificate (ECDSA for fast signing)
+const char client_kubelet_cert[] =
 "-----BEGIN CERTIFICATE-----\n"
-"MIICbDCCAhGgAwIBAgIUTwmkr9IGPTOwaa9I+BPZ6JDqoowwCgYIKoZIzj0EAwIw\n"
-"IzEhMB8GA1UEAwwYazNzLWNsaWVudC1jYUAxNzY4NTEyNzQwMB4XDTI2MDExNTIx\n"
-"MzY0OVoXDTI3MDExNTIxMzY0OVowOTEgMB4GA1UEAwwXc3lzdGVtOm5vZGU6cGlj\n"
-"by1ub2RlLTExFTATBgNVBAoMDHN5c3RlbTpub2RlczCCASIwDQYJKoZIhvcNAQEB\n"
-"BQADggEPADCCAQoCggEBALDSbJG0uF9S78kdaMSvlAc16qpX5h9t2pmLEBjN4yE0\n"
-"6VLASYDYyxCiTKZ9LDSz7Nil8Ia7nHRMuIlSX0+6CVTQPpnZ98rup1gChezDnk+A\n"
-"4gPTLIrkNppTfZ5DHle9B5NaYBtryMO0BwBrgfyThJzja6kmdNuiOw6pyxLRbEBI\n"
-"mSXUc0vwtxoVRO7UENVSigtHi6sjbxF71c2lOlImkyiZ/KwWA+cF83xATt/Ms362\n"
-"ScKBUPxO5xZOpTL4V/bfJqHIxfY8tkEIZ2br7vHxehyWnhGQLYeqcVH8uUJOpbKy\n"
-"xZdgX4AY7QrlOKcDgVh+sth+aSkC/ePPog7gkeYyWMcCAwEAAaNCMEAwHQYDVR0O\n"
-"BBYEFEcMhBsTVb4vHDDlicOxzXy8LhzoMB8GA1UdIwQYMBaAFIoze4IjLJEsBoA6\n"
-"NW/cLNqjeCY7MAoGCCqGSM49BAMCA0kAMEYCIQCvav53rPBrN5nqs7pg7nk69+dG\n"
-"4XnP6nb4LzatInnn5AIhAK3Y0Jp9z8aXGaN6h7lcaxbxRsyr28dk3NHBlKvCT6W4\n"
+"MIIBnzCCAUagAwIBAgIUTwmkr9IGPTOwaa9I+BPZ6JDqoo0wCgYIKoZIzj0EAwIw\n"
+"IzEhMB8GA1UEAwwYazNzLWNsaWVudC1jYUAxNzY4NTEyNzQwMB4XDTI2MDEyMTIy\n"
+"MTAzNloXDTI3MDEyMTIyMTAzNlowOTEVMBMGA1UECgwMc3lzdGVtOm5vZGVzMSAw\n"
+"HgYDVQQDDBdzeXN0ZW06bm9kZTpwaWNvLW5vZGUtMTBZMBMGByqGSM49AgEGCCqG\n"
+"SM49AwEHA0IABNB9wJ822s+VTdqP3vUt5mKvHD6uuziO9Z3S2u6zdzOmZSpVzRJa\n"
+"v6YT5Z9MnvagRbcal/VsZhb9xHKxOppsWjKjQjBAMB0GA1UdDgQWBBTF/am7Dkft\n"
+"ax2e6mOaY82aQ2EIQzAfBgNVHSMEGDAWgBSKM3uCIyyRLAaAOjVv3Czao3gmOzAK\n"
+"BggqhkjOPQQDAgNHADBEAiBR2Cr2v8jH43GD7MjZpkPfEUGU6ko836uRNf600VAO\n"
+"2wIgSlRGDAMAIQBTQL8q+zdr8lKX1enPpSf4hC2IyWCdUzc=\n"
 "-----END CERTIFICATE-----\n"
 ;
 
-// Client Kubelet Private Key
-const char client_kubelet_key[] = 
-"-----BEGIN PRIVATE KEY-----\n"
-"MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCw0myRtLhfUu/J\n"
-"HWjEr5QHNeqqV+YfbdqZixAYzeMhNOlSwEmA2MsQokymfSw0s+zYpfCGu5x0TLiJ\n"
-"Ul9PuglU0D6Z2ffK7qdYAoXsw55PgOID0yyK5DaaU32eQx5XvQeTWmAba8jDtAcA\n"
-"a4H8k4Sc42upJnTbojsOqcsS0WxASJkl1HNL8LcaFUTu1BDVUooLR4urI28Re9XN\n"
-"pTpSJpMomfysFgPnBfN8QE7fzLN+tknCgVD8TucWTqUy+Ff23yahyMX2PLZBCGdm\n"
-"6+7x8Xoclp4RkC2HqnFR/LlCTqWyssWXYF+AGO0K5TinA4FYfrLYfmkpAv3jz6IO\n"
-"4JHmMljHAgMBAAECggEAPgczCtIIs3fWoghtDkJBfV4Omf8HvRK+UoqT9P+Uo7t5\n"
-"9gt6PXbPlWA531Wdwkcz2LQtcjYyJiIbwiBhSwiJ6XS74SCzaj7Z+We5L1tYF6+w\n"
-"mYLk5zwzY2PSd0g4RrMLC0fy2uuum+h1ZFJSYRYmuRqWU9onuDxq1zP9BvbsMIgx\n"
-"PtDGA5p0QzWY9C+dRcTH9iOUjm98oJ0y8Tm7wcUBZCuUJkijTTD4j7kjzGP+KJSt\n"
-"jhUyqGNTdHGqAWInYLDWoYlHp1BGnLCF5cRM4MEx0lo9d0/6UObrtKvA89/UxgFm\n"
-"vv2BAyiPGO+k3H73nucxL2Ac/HYm32AJsQluStwy8QKBgQDo7evnaIiYFsa/0jXc\n"
-"TNcXplUwZuEeZNGEvzvUUMxPw37qvGmZwimIl/ge0mTXi0bCuCYZ/m7GJXt28kG4\n"
-"kEmE0+1HNQCuM5wWC//yOo1sIHpIOoTVVmQYPVJfOdC6paWgSa50aC3mg4tGaBBm\n"
-"gEjoIDc6cdSdgL/pKlLMi42iqwKBgQDCVdywc83D887XUJdUYwt5OJxzhONAqSu2\n"
-"plstzMkc9xQS1B21pJ/HD9MBYOZ7wg1yTFA0dRy6hWEbHFgCRccO1ipR1BkzfdUM\n"
-"ts7T7V+0mInRwiNyBDrfMtNmh/W0Sh2BlpsishRhCreS7SbcPlV1qYryn4oYFGn5\n"
-"EIaQDrICVQKBgB8n48v6IXsmYMM7nNSwunyBVRe6SxZDqfq1kY0emZV5sro3JXDZ\n"
-"lbCdkyScQ7zI9lgJRZ9oduyuCsuoL74+HndT2YMSxdqHMLOKO1vtFQmHdpO+sBHR\n"
-"EmZjnWb7Vr4AdhzwfhM39BvHMJPkS31KX3YdCQYaP7QpioHnlVeiuvktAoGAQb8C\n"
-"tr+28YBejgG58NbBXvWEGKDwsUOKgnStjEUoFSCSLfyNQJK9a38zB9hcoan5Gp4u\n"
-"1FB6s6/ENoPUUpCA08go8R4smHsNxQtj1dcM9fBVUB26GCzOLgzn8Fw3CBO6/8iQ\n"
-"G6DbvCkACjkpWIHOL8x4MbU/5v2hDJ5GqB4QozECgYEAo1baRKhV8UtbolP4dXlE\n"
-"QlpBlEZcfz8xsurSf4cC6KEWYIbWZwy2LCXNOC0cjDoVyKkpAe9Rm8sP6YLwMnMz\n"
-"FRpljoc6b6l4+MsZcgnjUwU0Kxpz66tv0nwJY5JqM69saCLc9lGeyl8FYJw+haST\n"
-"T/bPVdEWdwrgznYnMt1izCY=\n"
-"-----END PRIVATE KEY-----\n"
+// Client Kubelet Private Key (ECDSA for fast signing)
+const char client_kubelet_key[] =
+"-----BEGIN EC PRIVATE KEY-----\n"
+"MHcCAQEEIMh/uOBIQlT+2imYc9u0BCQEmm7ZJV7JWqAyMxMsa1b+oAoGCCqGSM49\n"
+"AwEHoUQDQgAE0H3Anzbaz5VN2o/e9S3mYq8cPq67OI71ndLa7rN3M6ZlKlXNElq/\n"
+"phPln0ye9qBFtxqX9WxmFv3EcrE6mmxaMg==\n"
+"-----END EC PRIVATE KEY-----\n"
 ;
 
 // Server CA Certificate

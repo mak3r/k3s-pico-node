@@ -27,6 +27,7 @@ add_executable(k3s_pico_node
     src/node_status.c
     src/configmap_watcher.c
     src/memory_manager.c
+    src/time_sync.c
 )
 
 # Include directories for headers
